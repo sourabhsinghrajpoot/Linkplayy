@@ -1,11 +1,13 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { PlayCircle, Sparkles, LogOut } from "lucide-react";
+import { PlayCircle, Sparkles, LogOut, Heart } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
-export default function Header({ dailyUsed, dailyLimit, onUpgradeClick, onAuthClick }) {
+export default function Header({ quota, onUpgradeClick, onAuthClick, onFavoritesClick }) {
   const { user, logout } = useAuth();
-  const isPro = user && user.subscription_status === "pro";
+  const isPro = quota?.is_pro || (user && user.subscription_status === "pro");
+  const used = quota?.used ?? 0;
+  const limit = quota?.limit ?? 3;
 
   return (
     <header
@@ -13,16 +15,16 @@ export default function Header({ dailyUsed, dailyLimit, onUpgradeClick, onAuthCl
       className="sticky top-0 z-40 backdrop-blur-xl bg-[#050505]/70 border-b border-white/5"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-8 py-4 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <div className="w-9 h-9 rounded-lg bg-[#e63946] flex items-center justify-center">
+        <a href="/" className="flex items-center gap-2 group">
+          <div className="w-9 h-9 rounded-lg bg-[#e63946] flex items-center justify-center group-hover:scale-105 transition-transform">
             <PlayCircle className="w-5 h-5 text-white" strokeWidth={2.5} />
           </div>
           <div className="font-display text-2xl font-black tracking-tight">
             link<span className="text-[#e63946]">play</span>
           </div>
-        </div>
+        </a>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {!isPro && (
             <div
               data-testid="free-quota-indicator"
@@ -30,7 +32,7 @@ export default function Header({ dailyUsed, dailyLimit, onUpgradeClick, onAuthCl
             >
               <span className="font-mono-lp text-xs text-zinc-400">Free</span>
               <span className="font-mono-lp text-sm font-bold text-white">
-                {dailyUsed}/{dailyLimit}
+                {used}/{limit}
               </span>
             </div>
           )}
@@ -47,6 +49,17 @@ export default function Header({ dailyUsed, dailyLimit, onUpgradeClick, onAuthCl
             </div>
           )}
 
+          {user && user !== false && (
+            <button
+              data-testid="favorites-header-btn"
+              onClick={onFavoritesClick}
+              className="hidden sm:flex items-center gap-1.5 p-2 rounded-md text-zinc-400 hover:text-[#e63946] hover:bg-white/5 transition-colors"
+              aria-label="Favorites"
+            >
+              <Heart className="w-4 h-4" />
+            </button>
+          )}
+
           {!isPro && (
             <Button
               data-testid="upgrade-header-btn"
@@ -59,14 +72,24 @@ export default function Header({ dailyUsed, dailyLimit, onUpgradeClick, onAuthCl
           )}
 
           {user && user !== false ? (
-            <button
-              data-testid="logout-btn"
-              onClick={logout}
-              className="p-2 rounded-md text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
-              aria-label="Log out"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              {user.picture && (
+                <img
+                  src={user.picture}
+                  alt=""
+                  className="w-8 h-8 rounded-full object-cover border border-white/10"
+                  data-testid="user-avatar"
+                />
+              )}
+              <button
+                data-testid="logout-btn"
+                onClick={logout}
+                className="p-2 rounded-md text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
+                aria-label="Log out"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
           ) : (
             <button
               data-testid="header-login-btn"

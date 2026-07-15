@@ -6,99 +6,114 @@ import HistoryList from "@/components/HistoryList";
 import PricingCard from "@/components/PricingCard";
 import AuthModal from "@/components/AuthModal";
 import PaymentModal from "@/components/PaymentModal";
+import ContinueWatching from "@/components/ContinueWatching";
+import FavoritesList from "@/components/FavoritesList";
 import { api, formatApiErrorDetail } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 
-const HISTORY_KEY = "linkplay_history";
-const QUOTA_KEY = "linkplay_quota";
-const DAILY_LIMIT = 3;
+const LOCAL_HISTORY_KEY = "linkplay_history_local";
 
-function todayStr() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function loadQuota() {
+function loadLocalHistory() {
   try {
-    const raw = JSON.parse(localStorage.getItem(QUOTA_KEY) || "{}");
-    if (raw.date !== todayStr()) return { date: todayStr(), count: 0 };
-    return raw;
-  } catch {
-    return { date: todayStr(), count: 0 };
-  }
-}
-
-function saveQuota(q) {
-  localStorage.setItem(QUOTA_KEY, JSON.stringify(q));
-}
-
-function loadHistory() {
-  try {
-    return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+    return JSON.parse(localStorage.getItem(LOCAL_HISTORY_KEY) || "[]");
   } catch {
     return [];
   }
 }
 
 export default function Home() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const isLoggedIn = !!(user && user !== false);
   const isPro = user && user.subscription_status === "pro";
 
   const [video, setVideo] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [history, setHistory] = useState(loadHistory());
-  const [quota, setQuota] = useState(loadQuota());
+  const [resumeSeconds, setResumeSeconds] = useState(0);
+  const [playing, setPlaying] = useState(false);
+
+  const [history, setHistory] = useState([]);
+  const [favorites, setFavorites] = useState([]);
+  const [continueList, setContinueList] = useState([]);
+  const [quota, setQuota] = useState({ used: 0, limit: 3, remaining: 3, is_pro: false });
+
   const [authOpen, setAuthOpen] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
 
-  const bumpQuota = () => {
-    const next = { date: todayStr(), count: quota.count + 1 };
-    setQuota(next);
-    saveQuota(next);
-  };
+  // Load quota (works for both guests and users)
+  const refreshQuota = useCallback(async () => {
+    try {
+      const q = await api.quota();
+      setQuota(q);
+    } catch (e) {
+      // fail-soft, keep defaults
+    }
+  }, []);
 
-  const addHistory = (v) => {
+  // Load user-specific data
+  const refreshUserData = useCallback(async () => {
+    if (!isLoggedIn) {
+      setHistory(loadLocalHistory());
+      setFavorites([]);
+      setContinueList([]);
+      return;
+    }
+    try {
+      const [h, f, c] = await Promise.all([
+        api.listHistory(),
+        api.listFavorites(),
+        api.listContinue(),
+      ]);
+      setHistory(h);
+      setFavorites(f);
+      setContinueList(c);
+    } catch (e) {
+      // fail-soft
+    }
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    refreshQuota();
+    refreshUserData();
+  }, [authLoading, refreshQuota, refreshUserData]);
+
+  const addLocalHistory = (v) => {
     const entry = {
-      id: v.id,
       source_url: v.source_url,
       title: v.title,
       size: v.size,
+      thumbnail: v.thumbnail,
       played_at: new Date().toISOString(),
     };
-    const next = [entry, ...history.filter((h) => h.source_url !== entry.source_url)].slice(0, 12);
+    const cur = loadLocalHistory();
+    const next = [entry, ...cur.filter((h) => h.source_url !== entry.source_url)].slice(0, 12);
+    localStorage.setItem(LOCAL_HISTORY_KEY, JSON.stringify(next));
     setHistory(next);
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
-  };
-
-  const clearHistory = () => {
-    setHistory([]);
-    localStorage.removeItem(HISTORY_KEY);
-    toast.success("History cleared");
   };
 
   const handlePlay = useCallback(
-    async (url) => {
-      // Enforce quota for non-pro
-      if (!isPro && quota.count >= DAILY_LIMIT) {
-        toast.error(`Daily free limit reached (${DAILY_LIMIT}/day). Upgrade to Pro for unlimited playback.`);
-        setPayOpen(false);
-        setAuthOpen(false);
-        // If user not logged in, ask them to sign up first via pricing flow
-        if (!user || user === false) {
-          setAuthOpen(true);
-        } else {
-          setPayOpen(true);
-        }
-        return;
-      }
-
-      setLoading(true);
+    async (url, seekTo = 0) => {
+      setPlaying(true);
       setVideo(null);
+      setResumeSeconds(seekTo);
       try {
         const data = await api.extract(url);
         setVideo(data);
-        if (!isPro) bumpQuota();
-        addHistory(data);
+        setQuota(data.quota || quota);
+
+        if (isLoggedIn) {
+          api.saveHistory({
+            source_url: data.source_url,
+            title: data.title,
+            size: data.size,
+            thumbnail: data.thumbnail,
+          })
+            .then(() => refreshUserData())
+            .catch(() => {});
+        } else {
+          addLocalHistory(data);
+        }
+
         toast.success("Video ready");
         setTimeout(() => {
           document.getElementById("video-anchor")?.scrollIntoView({
@@ -107,35 +122,67 @@ export default function Home() {
           });
         }, 100);
       } catch (err) {
-        toast.error(
-          formatApiErrorDetail(err.response?.data?.detail) ||
-            "Failed to load video"
-        );
+        const code = err.response?.status;
+        const msg = formatApiErrorDetail(err.response?.data?.detail) || "Failed to load video";
+        toast.error(msg);
+        if (code === 429) {
+          // Quota reached — offer upgrade
+          if (!isLoggedIn) setAuthOpen(true);
+          else setPayOpen(true);
+        }
+        refreshQuota();
       } finally {
-        setLoading(false);
+        setPlaying(false);
       }
     },
-    [isPro, quota.count, user, history]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isLoggedIn, quota, refreshQuota, refreshUserData]
   );
 
   const handleUpgrade = () => {
-    if (!user || user === false) {
-      setAuthOpen(true);
-    } else {
-      setPayOpen(true);
-    }
+    if (!isLoggedIn) setAuthOpen(true);
+    else setPayOpen(true);
   };
 
   const onAuthSuccess = () => {
-    // After signing up from upgrade CTA, open payment
+    // reload data + open payment
+    refreshQuota();
+    refreshUserData();
     setTimeout(() => setPayOpen(true), 250);
   };
 
-  useEffect(() => {
-    // reset quota if date changed
-    const q = loadQuota();
-    if (q.date !== quota.date) setQuota(q);
-  }, []);
+  const onPaySuccess = () => {
+    refreshQuota();
+    refreshUserData();
+  };
+
+  const clearAllHistory = async () => {
+    if (isLoggedIn) {
+      await api.clearHistory().catch(() => {});
+    } else {
+      localStorage.removeItem(LOCAL_HISTORY_KEY);
+    }
+    setHistory([]);
+    toast.success("History cleared");
+  };
+
+  const removeFavorite = async (source_url) => {
+    await api.removeFavorite(source_url).catch(() => {});
+    setFavorites((prev) => prev.filter((f) => f.source_url !== source_url));
+    toast.success("Removed from favorites");
+  };
+
+  const removeContinue = async (source_url) => {
+    await api.removeContinue(source_url).catch(() => {});
+    setContinueList((prev) => prev.filter((c) => c.source_url !== source_url));
+  };
+
+  const scrollToFavorites = () => {
+    document.querySelector('[data-testid="favorites-section"]')?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
 
   return (
     <div className="min-h-screen bg-[#050505] text-white relative overflow-hidden">
@@ -145,21 +192,42 @@ export default function Home() {
 
       <div className="relative z-10">
         <Header
-          dailyUsed={quota.count}
-          dailyLimit={DAILY_LIMIT}
+          quota={quota}
           onUpgradeClick={handleUpgrade}
           onAuthClick={() => setAuthOpen(true)}
+          onFavoritesClick={scrollToFavorites}
         />
 
-        <HeroInput onPlay={handlePlay} loading={loading} />
+        <HeroInput onPlay={(u) => handlePlay(u, 0)} loading={playing} />
 
         <div id="video-anchor" />
-        <VideoPanel video={video} />
+        <VideoPanel
+          video={video}
+          favorites={favorites}
+          onFavoritesChange={refreshUserData}
+          resumeSeconds={resumeSeconds}
+        />
+
+        {isLoggedIn && (
+          <ContinueWatching
+            items={continueList}
+            onResume={(url, sec) => handlePlay(url, sec)}
+            onRemove={removeContinue}
+          />
+        )}
+
+        {isLoggedIn && (
+          <FavoritesList
+            items={favorites}
+            onPlay={(url) => handlePlay(url, 0)}
+            onRemove={removeFavorite}
+          />
+        )}
 
         <HistoryList
           items={history}
-          onReplay={(url) => handlePlay(url)}
-          onClear={clearHistory}
+          onReplay={(url) => handlePlay(url, 0)}
+          onClear={clearAllHistory}
         />
 
         <PricingCard onSubscribe={handleUpgrade} isPro={isPro} />
@@ -181,7 +249,7 @@ export default function Home() {
         onOpenChange={setAuthOpen}
         onSuccess={onAuthSuccess}
       />
-      <PaymentModal open={payOpen} onOpenChange={setPayOpen} />
+      <PaymentModal open={payOpen} onOpenChange={setPayOpen} onSuccess={onPaySuccess} />
     </div>
   );
 }

@@ -1,0 +1,67 @@
+{
+  "summary": "Full regression testing of LinkPlay enhancements (server-side quota + rate limit via Mongo TTL, env-switch Razorpay mock/live, Emergent Google OAuth exchange endpoint, persistent history/favorites/continue-watching/preferences, and frontend changes). 16/16 backend tests pass, frontend smoke test for AuthModal + Google button + mock upgrade flow passes end-to-end. Razorpay is MOCKED as designed; Emergent Google OAuth exchange path only tested with invalid session_id -> 401 as expected.",
+  "tested_scope": ["backend", "frontend", "integration"],
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_backend": [
+    "GET /api/ -> razorpay_mode='mock', free_daily_limit=3",
+    "GET /api/quota (unauth) -> {used:0, limit:3, remaining:3, is_pro:false}",
+    "GET /api/subscribe/config -> mode='mock', amount_paise=4900, currency='INR', key_id=''",
+    "POST /api/terabox/extract with non-terabox URL -> 400 without consuming quota (verified used unchanged before/after)",
+    "POST /api/terabox/extract with fake terabox.com URL -> 422 with quota refund (verified used unchanged after failed call)",
+    "Rate limit: when rate_limits doc pre-seeded with count=3 for an IP (via X-Forwarded-For), 4th call -> 429 'Daily free limit reached (3/day). Upgrade to Pro for unlimited playback.'",
+    "POST /api/auth/register -> subscription_status='free', auth_provider='password', default preferences {autoplay:true,theme:'dark',default_quality:'auto'}",
+    "GET /api/preferences returns defaults; PATCH /api/preferences {autoplay:false} updates and persists across GET",
+    "POST /api/history dedupes by source_url (single entry, most recent played_at kept); GET returns; DELETE clears all",
+    "POST /api/favorites adds; duplicate -> 400 'Already in favorites'; DELETE ?source_url= removes",
+    "POST /api/continue-watching upserts (single row per source_url); when position/duration > 0.95 -> auto-removes (ok:true, removed:true); DELETE without params clears all",
+    "POST /api/auth/google/session with fake session_id -> 401 'Invalid or expired Google session' (backend proxies to Emergent, frontend does NOT call directly)",
+    "POST /api/subscribe/create-order (mock) -> {mode:'mock', order_id:'mock_order_...', amount:4900}",
+    "POST /api/subscribe/mock -> user upgraded to pro, GET /api/subscribe/status returns 'pro'; subsequently GET /api/quota returns {is_pro:true, limit:-1}",
+    "POST /api/subscribe/verify while mode=mock -> 400 'Razorpay live mode is not configured'",
+    "POST /api/webhook/razorpay with invalid signature -> 400 (currently returns 'Webhook secret not configured' because RAZORPAY_WEBHOOK_SECRET is empty in .env; this is a safe short-circuit but see minor note below)"
+  ],
+  "passed_frontend": [
+    "Home page loads: site-header, free-quota-indicator (shows 'Free 0/3'), paste-link-input, pricing section all present",
+    "Clicking header-login-btn opens AuthModal with tabs (auth-tab-signup / auth-tab-login), email/password inputs, submit button all wired",
+    "AuthModal now has 'Continue with Google' button with data-testid='google-signin-btn' (text 'Continue with Google')",
+    "Fresh signup via AuthModal automatically opens PaymentModal with mock-notice + confirm-payment-btn",
+    "Clicking confirm-payment-btn upgrades user to Pro: pro-badge appears in header, free-quota-indicator disappears; 'Welcome to LinkPlay Pro!' toast shown; pricing card shows 'You are already Pro'"
+  ],
+  "critical_code_review_comments": [
+    "MEDIUM: server.py:817 - /api/webhook/razorpay returns 400 'Webhook secret not configured' when RAZORPAY_WEBHOOK_SECRET is empty. Response body wording differs from test expectation ('Invalid webhook signature'). Consider distinguishing 500 (server misconfig) vs 400 (client signature bad). Currently both return 400 which is acceptable in mock mode but slightly misleading.",
+    "LOW: server.py:96-97 clear_auth_cookies now correctly uses secure/samesite/httponly matching attributes -> iteration_1 medium bug is FIXED. Verified logout cookie clears in code.",
+    "LOW: server.py:906 CORS uses allow_origin_regex only when origins==['*']; with CORS_ORIGINS='*' + no FRONTEND_URL, allow_origins=['*'] + allow_credentials=True is invalid per CORS spec. However FRONTEND_URL is set so it currently resolves to a single explicit origin -> fine.",
+    "LOW: server.py:194 429 message is user-facing detail; fine, but consider Retry-After header for programmatic clients.",
+    "LOW: server.py exceeds 900 lines; splitting into routers (auth.py, subscription.py, terabox.py, history.py) would improve maintainability but not required now.",
+    "INFO: /app/memory/test_credentials.md still says 'Rate limiting for free tier (3 links/day) is enforced client-side via localStorage' - stale, should note server-side enforcement now."
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_linkplay_backend.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Optional: distinguish HTTP status for 'webhook secret not configured' (500) vs 'invalid signature' (400) in /api/webhook/razorpay for clarity.",
+    "Optional: update /app/memory/test_credentials.md to reflect server-side rate limiting and add sample google session behavior.",
+    "Optional: consider refactoring server.py (~910 lines) into module-per-domain routers."
+  ],
+  "updated_files": [
+    "/app/backend/tests/conftest.py (new)",
+    "/app/backend/tests/test_linkplay_backend.py (new)"
+  ],
+  "success_rate": {"backend": "100% (16/16 pytest)", "frontend": "100% (all critical UI checks + full mock upgrade flow)"},
+  "test_credentials": "Fresh timestamped emails linkplay-test-<ts>@example.com / password: password123 used per test to avoid Pro-state pollution. test1@example.com is already Pro from prior iteration.",
+  "seed_data_creation": "For 429 test, seeded db.rate_limits with {identifier:'ip:203.0.113.99', day:today, count:3} and used X-Forwarded-For header to hit that identifier deterministically.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend passes fully. Frontend AuthCallback (#session_id fragment) cannot be automated because it requires a real Emergent OAuth redirect - only the invalid-session_id path is testable via /api/auth/google/session. VideoPanel favorite-btn requires a working real terabox link (upstream is flaky) - use /api/favorites CRUD via curl/pytest instead (already covered). Rate-limit tests are IP-based; if re-running in same environment, either clear db.rate_limits or use X-Forwarded-For to control the identifier.",
+  "rca of the issue": "N/A - no bugs found in this iteration. Iteration_1 medium issue (logout not clearing cookies) is already fixed at server.py:96-97 with matching secure/samesite/httponly attributes on delete_cookie."
+}
