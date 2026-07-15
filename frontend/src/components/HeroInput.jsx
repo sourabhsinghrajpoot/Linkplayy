@@ -101,10 +101,12 @@ export default function HeroInput({ onPlay, loading }) {
 
         <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs text-zinc-500 font-mono-lp">
           <span>terabox.com</span>
-          <span>terabox.app</span>
-          <span>1024tera.com</span>
+          <span>terasharelink.com</span>
+          <span>terashare.co</span>
+          <span>teraboxshare.com</span>
+          <span>1024terabox.com</span>
           <span>4funbox.com</span>
-          <span>+ more mirrors</span>
+          <span>+ all Terabox mirrors</span>
         </div>
       </div>
     </section>

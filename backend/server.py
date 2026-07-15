@@ -459,13 +459,29 @@ TERABOX_HOSTS = [
     "terabox.com", "terabox.app", "1024tera.com", "4funbox.com", "mirrobox.com",
     "nephobox.com", "terasharelink.com", "teraboxapp.com", "terabox.club",
     "momerybox.com", "1024terabox.com", "freeterabox.com",
+    # Additional Terabox share mirror domains
+    "terashare.co", "teraboxshare.com", "terafileshare.com", "terafileshareonline.com",
+    "teraboxlink.com", "tibibox.com", "terafileshare.co", "terabox.fun",
+    "gibibox.com", "goaibox.com", "terabox.online", "teraboxapp.pro",
 ]
 
 
 def is_valid_terabox_url(url: str) -> bool:
     if not url or not isinstance(url, str):
         return False
-    return any(h in url.lower() for h in TERABOX_HOSTS)
+    url_lower = url.lower()
+    # Explicit host whitelist (most reliable)
+    if any(h in url_lower for h in TERABOX_HOSTS):
+        return True
+    # Lenient fallback: accept any URL that contains "tera" or "1024" in the
+    # host portion (covers unforeseen Terabox mirror domains). The upstream
+    # extractor will reject if it can't handle it.
+    try:
+        from urllib.parse import urlparse
+        host = (urlparse(url).hostname or "").lower()
+        return ("tera" in host) or ("1024" in host and "box" in host)
+    except Exception:
+        return False
 
 
 def normalize_extractor_response(raw: dict) -> Optional[dict]:
