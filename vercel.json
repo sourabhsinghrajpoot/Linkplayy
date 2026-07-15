@@ -5,7 +5,10 @@
       "framework": "create-react-app"
     },
     "backend": {
-      "root": "backend"
+      "root": "backend",
+      "framework": "fastapi",
+      "runtime": "python",
+      "entrypoint": "server.py"
     }
   },
   "rewrites": [
