@@ -29,11 +29,31 @@ except Exception:
 
 
 # ---------------------------------------------------------------------------
-# Setup
+# Setup (tolerant of missing env vars so /api/ health works even if
+# MONGO_URL / DB_NAME are not configured on the platform)
 # ---------------------------------------------------------------------------
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+mongo_url = os.environ.get('MONGO_URL', '')
+db_name = os.environ.get('DB_NAME', 'linkplay')
+
+if mongo_url:
+    try:
+        client = AsyncIOMotorClient(mongo_url)
+        db = client[db_name]
+    except Exception as _e:  # pragma: no cover
+        client = None
+        db = None
+else:
+    client = None
+    db = None
+
+
+def require_db():
+    if db is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Database is not configured. Set MONGO_URL (and DB_NAME) in your environment.",
+        )
+    return db
 
 app = FastAPI(title="LinkPlay API")
 api_router = APIRouter(prefix="/api")
@@ -133,6 +153,8 @@ def serialize_user(u: dict) -> dict:
 
 
 async def get_current_user_optional(request: Request) -> Optional[dict]:
+    if db is None:
+        return None
     token = request.cookies.get("access_token")
     if not token:
         auth = request.headers.get("Authorization", "")
@@ -173,6 +195,12 @@ async def check_and_consume_quota(user: Optional[dict], request: Request) -> dic
     if user and _sub_active(user):
         return {"used": 0, "limit": -1, "remaining": -1, "is_pro": True}
 
+    # When DB is not configured, allow the request (fail-open) — the deployment
+    # is misconfigured but we shouldn't hard-block extraction. Frontend will
+    # still display default quota.
+    if db is None:
+        return {"used": 0, "limit": FREE_DAILY_LIMIT, "remaining": FREE_DAILY_LIMIT, "is_pro": False}
+
     # Identify: user_id if logged-in else IP
     if user:
         identifier = f"user:{user['_id']}"
@@ -207,6 +235,9 @@ async def check_and_consume_quota(user: Optional[dict], request: Request) -> dic
 async def get_quota_status(user: Optional[dict], request: Request) -> dict:
     if user and _sub_active(user):
         return {"used": 0, "limit": -1, "remaining": -1, "is_pro": True}
+
+    if db is None:
+        return {"used": 0, "limit": FREE_DAILY_LIMIT, "remaining": FREE_DAILY_LIMIT, "is_pro": False}
 
     if user:
         identifier = f"user:{user['_id']}"
@@ -283,6 +314,7 @@ class PreferencesInput(BaseModel):
 # ---------------------------------------------------------------------------
 @api_router.post("/auth/register")
 async def register(payload: RegisterInput, response: Response):
+    require_db()
     email = payload.email.lower().strip()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -311,6 +343,7 @@ async def register(payload: RegisterInput, response: Response):
 
 @api_router.post("/auth/login")
 async def login(payload: LoginInput, response: Response):
+    require_db()
     email = payload.email.lower().strip()
     user = await db.users.find_one({"email": email})
     if not user or not user.get("password_hash") or not verify_password(payload.password, user["password_hash"]):
@@ -340,6 +373,7 @@ async def get_me(user: dict = Depends(get_current_user)):
 async def google_session_exchange(payload: GoogleSessionInput, response: Response):
     """Exchange Emergent OAuth session_id for our own JWT cookies.
     Called from AuthCallback on the frontend."""
+    require_db()
     session_url = os.environ.get(
         "EMERGENT_AUTH_SESSION_URL",
         "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
@@ -539,6 +573,8 @@ async def extract_terabox(payload: TeraboxRequest, request: Request):
 
 async def _refund_quota(user: Optional[dict], request: Request) -> None:
     if user and _sub_active(user):
+        return
+    if db is None:
         return
     if user:
         identifier = f"user:{user['_id']}"
@@ -857,14 +893,23 @@ async def root():
         "status": "ok",
         "razorpay_mode": _razorpay_mode(),
         "free_daily_limit": FREE_DAILY_LIMIT,
+        "db_configured": db is not None,
     }
 
 
+@api_router.get("/health")
+async def health():
+    return {"status": "ok", "db_configured": db is not None}
+
+
 # ---------------------------------------------------------------------------
-# Startup: indexes
+# Startup: indexes (safe when DB is not configured)
 # ---------------------------------------------------------------------------
 @app.on_event("startup")
 async def startup():
+    if db is None:
+        logger.warning("MONGO_URL not configured — DB endpoints will return 503")
+        return
     try:
         await db.users.create_index("email", unique=True)
         await db.rate_limits.create_index([("identifier", 1), ("day", 1)], unique=True)
@@ -884,7 +929,8 @@ async def startup():
 
 @app.on_event("shutdown")
 async def shutdown():
-    client.close()
+    if client is not None:
+        client.close()
 
 
 # ---------------------------------------------------------------------------

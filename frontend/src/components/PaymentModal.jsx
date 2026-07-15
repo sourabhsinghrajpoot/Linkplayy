@@ -51,8 +51,26 @@ export default function PaymentModal({ open, onOpenChange, onSuccess }) {
   };
 
   const handleLive = async () => {
+    // Lazy-load Razorpay Checkout script on demand
+    if (typeof window !== "undefined" && !window.Razorpay) {
+      await new Promise((resolve, reject) => {
+        const existing = document.getElementById("razorpay-checkout-js");
+        if (existing) {
+          existing.addEventListener("load", resolve, { once: true });
+          existing.addEventListener("error", reject, { once: true });
+          return;
+        }
+        const s = document.createElement("script");
+        s.id = "razorpay-checkout-js";
+        s.src = "https://checkout.razorpay.com/v1/checkout.js";
+        s.async = true;
+        s.onload = resolve;
+        s.onerror = reject;
+        document.body.appendChild(s);
+      }).catch(() => {});
+    }
     if (typeof window === "undefined" || !window.Razorpay) {
-      toast.error("Razorpay Checkout not loaded. Please refresh and try again.");
+      toast.error("Razorpay Checkout could not load. Please try again.");
       return;
     }
     setLoading(true);

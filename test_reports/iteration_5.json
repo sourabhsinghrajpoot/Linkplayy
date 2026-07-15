@@ -1,0 +1,53 @@
+{
+  "summary": "Verified Vercel deploy hardening: (a) full backend regression 16/16 pytest suite passes against public preview URL with DB configured, (b) code inspection confirms server.py is tolerant to missing MONGO_URL (module imports without KeyError; require_db() gates auth endpoints; get_current_user_optional/get_quota_status/_refund_quota/check_and_consume_quota all short-circuit safely when db is None), (c) frontend home page renders correctly with NO third-party scripts eager-loaded (index.html contains only meta + <div id='root'> + noscript), (d) full UI signup + mock payment flow works and Razorpay checkout.js is NOT injected in mock mode.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "verified_regression": {
+    "GET /api/": "200 {service:'LinkPlay API', status:'ok', razorpay_mode:'mock', free_daily_limit:3, db_configured:true}",
+    "GET /api/health": "returns {status:'ok', db_configured:true} (via code inspection + working /api/ proves same import path)",
+    "pytest suite": "16/16 pass in ~10s (auth register/login/logout/me, terabox validation, quota consumption/refund/429, subscription mock/config/create-order/verify-blocked, google session 401, webhook sig, favorites/history/continue-watching CRUD)"
+  },
+  "verified_code_safety": {
+    "server.py line 35-47": "mongo_url = os.environ.get('MONGO_URL', ''); client=None, db=None if not mongo_url — no KeyError at import",
+    "server.py line 50-56": "require_db() raises 503 with clean detail when db is None",
+    "server.py line 155-157": "get_current_user_optional returns None when db is None",
+    "server.py line 239-240": "get_quota_status returns default free quota when db is None",
+    "server.py line 201-202": "check_and_consume_quota fails-open with default free quota when db is None",
+    "server.py line 577-578": "_refund_quota is a no-op when db is None",
+    "server.py line 317, 346, 376": "/api/auth/register, /login, /google/session all call require_db() first",
+    "server.py line 908-912": "startup event returns early with warning log when db is None"
+  },
+  "verified_frontend_safety": {
+    "public/index.html": "Only contains meta tags + <noscript> + <div id='root'>. No PostHog/emergent-main.js/Razorpay checkout script. Confirmed at runtime: page.scripts contains only bundle.js + cloudflareinsights beacon.",
+    "src/App.js": "Wraps app in ErrorBoundary correctly (import + <ErrorBoundary> around <AuthProvider>)",
+    "components/ErrorBoundary.jsx": "componentDidCatch + getDerivedStateFromError implemented; reset UI has data-testid='error-reset-btn'",
+    "components/PaymentModal.jsx": "handleLive() lazy-injects <script id='razorpay-checkout-js' src='https://checkout.razorpay.com/v1/checkout.js'> only when live-mode payment initiated. Verified at runtime in mock mode: document.getElementById('razorpay-checkout-js') === null after PaymentModal opens.",
+    "console_errors_on_home": "Only 3 x '401' entries from /api/auth/me pre-login probe (expected). No 't.map is not a function' or other JS runtime errors."
+  },
+  "verified_e2e_ui_flow": {
+    "step1_home_load": "site-header, hero-title, paste-link-input visible",
+    "step2_click_upgrade_header": "auth-modal opens; testids present: auth-modal, auth-tab-signup, auth-tab-login, google-signin-btn, auth-name-input, auth-email-input, auth-password-input, auth-submit-btn",
+    "step3_signup_fresh_email": "Toast 'Account created!' shown; payment-modal opens with mock-notice visible; razorpay-checkout-js NOT in DOM (correct for mock)",
+    "step4_click_pay_mock": "Toast 'Welcome to LinkPlay Pro!'; pro-badge appears in header; mock-notice gone; payment-modal closed; pro-card shows 'You are already Pro'"
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_linkplay_backend.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py: All db-touching code paths now guarded — the import is fully tolerant to missing MONGO_URL and Vercel cold-start will no longer FUNCTION_INVOCATION_FAILED at module load.",
+    "index.html is now minimal (only meta + root div). Third-party scripts removed. This resolves the 't.map' crash from emergent-main.js/PostHog/Razorpay pre-loading on non-Emergent domains.",
+    "PaymentModal.jsx lazy-loads Razorpay only on live-mode click — clean, mode-aware.",
+    "ErrorBoundary is correctly placed at the outermost level in App.js (outside AuthProvider), so even a crash in AuthProvider is caught.",
+    "Minor: /api/subscribe/verify, /api/webhook/razorpay, /api/preferences etc. don't explicitly call require_db(). They will 500 on Vercel if MONGO_URL is unset, but only after 401 from get_current_user (which is safe), so effectively they degrade to 401 — acceptable for a misconfigured deployment. Could add require_db() for cleaner 503s if desired."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "100% (full signup + mock upgrade flow verified end-to-end)"},
+  "test_credentials": "Fresh timestamped emails (fresh_<ts>@example.com) via test-run generation. Password: password123.",
+  "seed_data_creation": "None persisted beyond fresh_<ts>@example.com registrations from pytest (isolated per-test) and one from Playwright UI flow.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Vercel-safety iteration complete. Preview at https://terabox-stream-2.preview.emergentagent.com is healthy. Full backend regression + full frontend upgrade UX confirmed. User's Vercel domain will still 500 until they set MONGO_URL/JWT_SECRET/etc. in Vercel env — that's a config task on their side, not a code fix. Canonical backend regression suite: /app/backend/tests/test_linkplay_backend.py."
+}
