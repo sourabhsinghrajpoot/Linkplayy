@@ -1,0 +1,125 @@
+{
+  "project_overview": {
+    "name": "LinkPlay",
+    "type": "Hybrid Fullstack (Utility Tool + Freemium SaaS)",
+    "description": "A cinematic Terabox video player where users paste a link and the video plays instantly.",
+    "theme": "Cinematic Dark Mode (Strictly no purple gradients)"
+  },
+  "typography": {
+    "fonts": [
+      {
+        "family": "Cabinet Grotesk",
+        "usage": "Headings, Hero Title",
+        "import_url": "https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@800,500,700,400,900&display=swap"
+      },
+      {
+        "family": "JetBrains Mono",
+        "usage": "Link Input, Technical Data, File Size, Quota Numbers",
+        "import_url": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap"
+      },
+      {
+        "family": "Outfit",
+        "usage": "Body text, UI elements, Buttons",
+        "import_url": "https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap"
+      }
+    ],
+    "hierarchy": {
+      "h1": "font-['Cabinet_Grotesk'] text-5xl md:text-6xl font-black tracking-tight",
+      "h2": "font-['Cabinet_Grotesk'] text-3xl md:text-4xl font-bold tracking-tight",
+      "h3": "font-['Cabinet_Grotesk'] text-xl md:text-2xl font-bold",
+      "body": "font-['Outfit'] text-base leading-relaxed text-zinc-300",
+      "mono": "font-['JetBrains_Mono'] text-sm tracking-tight"
+    }
+  },
+  "colors": {
+    "palette": {
+      "background": "#050505",
+      "surface": "#0C0C0E",
+      "surface_elevated": "#121214",
+      "primary": "#E63946",
+      "primary_hover": "#F04856",
+      "accent": "#FACC15",
+      "text_main": "#F8F8F8",
+      "text_muted": "#8A8A93",
+      "border": "#27272A"
+    },
+    "rules": [
+      "Backgrounds must be deeply dark off-black, never pure black.",
+      "Use Electric Crimson (#E63946) for primary actions (Play, Paste, Subscribe).",
+      "Use Cinematic Gold (#FACC15) for Pro Tier badges and highlights.",
+      "No generic gradients. Use solid colors with texture or subtle glows."
+    ]
+  },
+  "layout": {
+    "spacing": "Generous scaling: p-6, p-8, p-12, p-16. Containers must have internal padding.",
+    "grid_system": "Bento grid for Video Info and History. High-density for details, wide gaps for sections.",
+    "alignment": "Optical alignment over geometrical. Left-align dense content, avoid center-aligning everything."
+  },
+  "components": {
+    "header": {
+      "style": "Crystal Glassmorphism: backdrop-blur-xl bg-[#050505]/70 border-b border-white/5",
+      "elements": "Logo, Daily Quota Indicator (e.g. 2/3 Free Links), 'Upgrade to Pro' CTA button."
+    },
+    "hero_input": {
+      "style": "Massive text input using JetBrains Mono. High contrast focus state with glowing ring focus:ring-2 focus:ring-[#E63946]/50. Button integrated into the input line.",
+      "behavior": "When link is pasted, smoothly transitions and reveals the video player canvas."
+    },
+    "video_player": {
+      "style": "Cinematic UI: Full width container, rounded-xl, deep shadow. Playback controls fade out. Neon/colorful accents for progress bar.",
+      "elements": "Video Canvas, Custom HTML5 Controls (Play, Progress, Volume, Fullscreen)."
+    },
+    "video_info_bento": {
+      "style": "Neumorphic / Sharp edge flat surfaces (bg-[#0C0C0E] border border-white/5).",
+      "elements": "Thumbnail Image, Video Title, File Size (JetBrains Mono), Download Button."
+    },
+    "history_section": {
+      "style": "Minimalist list of recently played links with timestamps. Hover effects on list items.",
+      "elements": "Link text, time ago, replay action."
+    },
+    "pricing_pro_card": {
+      "style": "Tracing beam or high-contrast border. Dark background with glowing gold accents.",
+      "details": "₹49/month, Unlimited Links, HD Quality, Fast Download. 'Get Pro' button opens Auth Modal."
+    },
+    "auth_modal": {
+      "style": "Shadcn Dialog. Dark glass overlay. Form fields use Shadcn Input.",
+      "elements": "JWT Email/Password, Google Login button."
+    }
+  },
+  "motion_and_interactions": {
+    "hover_states": "Buttons lift (-translate-y-1) and increase brightness. Text colors explicitly set on hover.",
+    "transitions": "Use specific properties (transition-transform, transition-opacity, transition-colors). NO 'transition-all'.",
+    "animations": "Subtle entrance stagger for history list items."
+  },
+  "images": {
+    "hero_background_abstract": "https://images.unsplash.com/photo-1673347765440-ce248bebc94d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTF8MHwxfHNlYXJjaHw0fHxjaW5lbWF0aWMlMjBkYXJrJTIwdmlkZW8lMjB0aHVtYm5haWwlMjBhYnN0cmFjdHxlbnwwfHx8fDE3ODQwOTE2NDZ8MA&ixlib=rb-4.1.0&q=85",
+    "pro_tier_badge_image": "https://images.unsplash.com/photo-1751935223137-55bc9f26f0e2?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzOTB8MHwxfHNlYXJjaHwyfHxtb3ZpZSUyMGNsYXBwZXJib2FyZCUyMG5lb258ZW58MHx8fHwxNzg0MDkxNjQ2fDA&ixlib=rb-4.1.0&q=85",
+    "dummy_video_thumbnail": "https://images.unsplash.com/photo-1566410824233-a8011929225c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTF8MHwxfHNlYXJjaHwzfHxjaW5lbWF0aWMlMjBkYXJrJTIwdmlkZW8lMjB0aHVtYm5haWwlMjBhYnN0cmFjdHxlbnwwfHx8fDE3ODQwOTE2NDZ8MA&ixlib=rb-4.1.0&q=85"
+  },
+  "testing_attributes": {
+    "requirement": "All interactive and key informational elements MUST include a 'data-testid' attribute.",
+    "examples": "data-testid='paste-link-input', data-testid='play-video-btn', data-testid='pro-upgrade-btn', data-testid='free-quota-indicator'"
+  },
+  "universal_guidelines_for_main_agent": [
+    "Avoid generic 'AI slop' aesthetics. Do NOT use Inter or Roboto for headings.",
+    "Implement the font imports inside src/index.css.",
+    "Create depth through layered design elements with z-index hierarchy and backdrop blurs.",
+    "Do NOT use pure transparent overlays. Always use a blur or semi-solid scrim.",
+    "Do NOT center align the app container (.App { text-align: center; } MUST be removed or avoided).",
+    "Ensure all buttons are explicitly styled for hover, active, and focus states (higher contrast on focus).",
+    "Use 'lucide-react' for icons. No emoji icons.",
+    "Toasts must use 'sonner' (Shadcn integration).",
+    "Follow the specified color palette. No purple gradients."
+  ],
+  "instructions_to_main_agent": [
+    "1. Setup global fonts in index.css: Cabinet Grotesk, JetBrains Mono, Outfit.",
+    "2. Configure Tailwind config with the specified cinematic dark mode colors (avoiding purple entirely).",
+    "3. Build the Navigation Bar (Glassmorphism) with Logo, Quota Indicator, and Upgrade CTA.",
+    "4. Build the Hero Section featuring a large, dominant 'Paste Terabox Link' input field.",
+    "5. Implement a mock Inline Video Player that appears after link submission, styled cinematically.",
+    "6. Build a Bento-style Grid below the player for Video Metadata (Title, Size, Thumbnail) and Download button.",
+    "7. Build the Recently Played Links History section.",
+    "8. Build a visually striking Pro Tier Pricing Card (₹49/month) utilizing the neon movie sign image for flair.",
+    "9. Create the Auth Modal (Login/Signup) triggered solely by the Pro subscription flow.",
+    "10. Ensure all components use 'data-testid' and adhere to the strict spacing/typography rules."
+  ]
+}
