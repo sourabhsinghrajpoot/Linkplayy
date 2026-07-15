@@ -1,0 +1,39 @@
+{
+  "summary": "Latency-sensitive first-finish test of LinkPlay covering auth, terabox extract, MOCKED subscription, and full frontend flow (upgrade -> signup -> mock payment -> PRO). All critical flows pass. Razorpay is MOCKED as expected.",
+  "tested_scope": ["backend", "frontend", "auth", "integration"],
+  "passed": [
+    "POST /api/auth/register (fresh email) -> 200 with serialized user (subscription_status='free', httpOnly cookies set)",
+    "POST /api/auth/login (correct creds) -> 200 with user + cookies",
+    "POST /api/auth/login (wrong creds) -> 401 'Invalid email or password'",
+    "GET /api/auth/me with cookie -> 200 current user; without cookie -> 401 'Not authenticated'",
+    "POST /api/terabox/extract non-terabox url -> 400 'Not a valid Terabox link'",
+    "POST /api/terabox/extract fake terabox.com url -> 422 clean error 'Could not extract this Terabox link. It may be private, expired, or unsupported.' (upstream failure handled cleanly)",
+    "POST /api/subscribe/mock without auth -> 401 'Not authenticated'",
+    "POST /api/subscribe/mock with auth + body {plan:'pro_monthly'} (as frontend sends) -> 200, user upgraded to pro, expires ~30 days out. GET /api/subscribe/status returns status='pro' with expires_at",
+    "Home page loads: header, logo, free-quota-indicator (0/3), upgrade-header-btn, header-login-btn, hero, paste-link-input, play-video-btn, pricing-section all present",
+    "Clicking header Upgrade opens AuthModal with signup tab visible (user not logged in)",
+    "Switching to Log in tab + wrong creds shows auth-error 'Invalid email or password'",
+    "Signup with fresh email closes AuthModal and automatically opens PaymentModal with mock-notice and 'Pay \u20b949 (mock)' button",
+    "Clicking confirm-payment-btn upgrades user; PRO badge appears in header (replacing free quota indicator)",
+    "Pasting non-terabox URL + Play shows red 'Not a valid Terabox link' toast (visible in screenshot; UI does not crash)"
+  ],
+  "failed": [
+    {
+      "area": "backend / auth logout",
+      "issue": "POST /api/auth/logout returns 200 {ok:true} but response.delete_cookie() in server.py:88-89 does NOT set matching secure=True, samesite='none', httponly=True attributes. In curl, the cookie jar retains the old cookie and /api/auth/me still returns the user after logout. Browsers with strict cookie policies may also fail to clear cookies without matching attributes. Frontend browser flow was not blocked in testing, but this is a latent bug.",
+      "evidence": "curl -b cookies -c cookies POST /api/auth/logout -> {\"ok\":true}; subsequent GET /api/auth/me -> 200 with user still returned. server.py lines 87-89 use bare delete_cookie without secure/samesite.",
+      "priority": "MEDIUM"
+    }
+  ],
+  "action_items": [
+    "Update clear_auth_cookies() in /app/backend/server.py to pass matching attributes to delete_cookie: response.delete_cookie('access_token', path='/', secure=True, samesite='none', httponly=True) and same for refresh_token. This ensures browsers actually clear the cookies."
+  ],
+  "success_rate": {"backend": "88% (7/8 tested behaviors pass; logout cookie-clearing incomplete)", "frontend": "100% (7/7 flows pass)"},
+  "retest_needed": false,
+  "full_testing_deferred": true,
+  "notes": [
+    "Razorpay payment flow is MOCKED — /api/subscribe/mock instantly marks user as pro without real payment. Confirmed in UI (PaymentModal shows MOCKED notice + 'Pay \u20b949 (mock)').",
+    "Terabox extractor calls live third-party API (https://wdzone-terabox-api.vercel.app/api). Fake links return clean 422 as designed. Real link extraction NOT tested (no valid share URL available).",
+    "Frontend uses withCredentials + httpOnly cookies over HTTPS via REACT_APP_BACKEND_URL — cookies correctly set/received in browser flow."
+  ]
+}
