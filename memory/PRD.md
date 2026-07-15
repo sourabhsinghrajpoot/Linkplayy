@@ -3,42 +3,38 @@
 ## Original Problem Statement
 "Name - linkplay, ek aise website jiske frontpage pr terabox ki link paste krne ka option ho aur jab link paste kru tab video play ho jaaye terabox ki"
 
-## User-confirmed Choices
-- Terabox extraction via a free community API (env-configurable `TERABOX_API_URL`, default `wdzone-terabox-api.vercel.app/api`).
-- Full feature set: paste + inline play, download button, video metadata (title/size/thumbnail), and recently-played history.
-- Modern cinematic dark theme (crimson + gold accents, no purple gradients).
-- No login required for free usage. Sign-up + payment required only for the ₹49/month Pro subscription.
-- Payment: **MOCKED** Razorpay flow (UI complete; will go live when keys added).
-- Rate limiting for free users: 3 links/day, tracked client-side via localStorage.
-- Auth: JWT email/password (httpOnly cookies).
+## User-confirmed Choices (across iterations)
+- Terabox extraction via configurable `TERABOX_API_URL` env var (default: `wdzone-terabox-api.vercel.app/api`).
+- Freemium: Free tier limited to 3 links/day (server-side, MongoDB TTL). Pro tier ₹49/month unlocks unlimited + HD.
+- Razorpay integration with env-switch `RAZORPAY_MODE=mock|live` — auto-falls back to mock when keys empty.
+- Google OAuth alongside JWT email/password (Emergent-managed).
+- Cinematic dark theme, no purple gradients.
+- Frontend never touches third-party services directly; all sensitive ops server-side.
 
 ## Architecture
-- **Backend**: FastAPI + Motor (MongoDB). httpx for calling upstream Terabox extractor. bcrypt + PyJWT for auth.
-- **Frontend**: React 19, TailwindCSS, shadcn/ui, sonner, lucide-react, framer-motion. Fonts: Cabinet Grotesk (display), JetBrains Mono, Outfit.
+- **Backend**: FastAPI + Motor (MongoDB), bcrypt + PyJWT auth, httpx for upstream calls, `razorpay` SDK, MongoDB TTL for rate limits.
+- **Frontend**: React 19, Tailwind, shadcn/ui, sonner. Cabinet Grotesk (display) + JetBrains Mono + Outfit fonts.
+- **Persistence collections**: `users`, `history`, `favorites`, `continue_watching`, `orders`, `rate_limits (TTL)`.
+- **CORS**: single-origin from `FRONTEND_URL`, credentials enabled.
 
-## What's Been Implemented (2026-02-15)
-- ✅ Cinematic dark UI (Header with quota, Hero paste input, Video player, Info Bento, History, Pricing card, Footer).
-- ✅ Auth: register/login/logout/me with httpOnly cookies. Bcrypt hashing.
-- ✅ Terabox extractor endpoint (`POST /api/terabox/extract`) with URL validation + multi-schema response normalization.
-- ✅ Inline HTML5 video player with poster + download button + view-original link.
-- ✅ localStorage history (last 12) + daily quota gating.
-- ✅ MOCKED Razorpay subscribe flow (`POST /api/subscribe/mock`) — instantly upgrades user to Pro for 30 days.
-- ✅ Sonner toast notifications on all events.
+## What's Been Implemented
+### Iteration 1 (2026-02-15)
+- Cinematic UI + email/password auth + basic Terabox extractor + mock Razorpay + localStorage history.
+
+### Iteration 2 (2026-02-15)
+- Server-side quota + rate limiting via MongoDB TTL (per-user or per-IP).
+- Full Razorpay integration with env-switch (mode=mock|live), create-order/verify/webhook endpoints with HMAC signature verification.
+- Emergent Google OAuth: frontend button + `AuthCallback` component + backend `/api/auth/google/session` exchange endpoint (backend calls Emergent, frontend never does).
+- Persisted history/favorites/continue-watching/preferences endpoints (all `/api/*`).
+- VideoPanel: heart button to favorite; auto-save resume position every 10s to `/api/continue-watching`.
+- New sections: Continue Watching (with progress bars) + Favorites (only shown when logged in).
+- Frontend consumes `/api/quota` from server for the header indicator (no more localStorage).
+- Razorpay Checkout script loaded from `checkout.razorpay.com` in `index.html`; PaymentModal picks mock vs live based on `/api/subscribe/config`.
 
 ## Backlog / Next Steps
-- **P0**: Wire real Razorpay checkout (need `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`).
-- **P1**: Replace default Terabox extractor URL with user's own endpoint via `.env`.
-- **P1**: Server-side quota tracking for authenticated users (localStorage is bypassable).
-- **P2**: Emergent Google OAuth login (in addition to email/password).
-- **P2**: Persistent per-account history in MongoDB when logged in.
-- **P2**: Support for multiple video qualities (SD/HD) when upstream provides them.
-- **P2**: Sharing / short-links to a preview page.
-
-## Personas
-- **Casual user**: Grabs a Terabox share link from a friend, wants to watch without downloading.
-- **Power user**: Watches many Terabox links a day → converts to Pro for unlimited playback + HD.
-
-## Core Requirements (static)
-- Front-page-first: paste input is the hero. Zero friction for free playback.
-- No login required for the free tier.
-- Cinematic dark aesthetic. No purple/violet gradients.
+- **P0**: Add real Razorpay keys → `RAZORPAY_MODE=live` + `RAZORPAY_KEY_ID/SECRET/WEBHOOK_SECRET` in `/app/backend/.env`.
+- **P1**: Register the webhook URL in Razorpay dashboard: `{FRONTEND_URL}/api/webhook/razorpay`.
+- **P2**: Migration for existing users who signed up before `user_id`/preferences fields — currently the app tolerates missing fields.
+- **P2**: Per-user quality preference wired to a source-selector (currently only stored in preferences).
+- **P2**: Downgrade cron: mark users as free when `subscription_expires_at < now`.
+- **P2**: Shareable preview page for a played link (WhatsApp/Telegram growth loop).
