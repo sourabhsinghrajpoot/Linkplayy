@@ -1,0 +1,28 @@
+{
+  "summary": "Minimal smoke test after adding /app/vercel.json for Vercel deployment. All 3 backend endpoints and frontend home page verified — runtime app unaffected by the static Vercel config file.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "smoke_test_results": {
+    "vercel_json": "EXISTS at /app/vercel.json — valid JSON with services (frontend + backend) and rewrites for /api and catch-all",
+    "GET /api/": "200 OK — {service:'LinkPlay API', status:'ok', razorpay_mode:'mock', free_daily_limit:3}",
+    "GET /api/quota": "200 OK — {used:0, limit:3, remaining:3, is_pro:false}",
+    "GET /api/subscribe/config": "200 OK — {mode:'mock', key_id:'', amount_paise:4900, currency:'INR', plan_name:'LinkPlay Pro (Monthly)'}",
+    "Frontend home page": "site-header, hero-title ('Paste a Terabox link. Play it instantly.'), and paste-link-input all visible and rendered correctly"
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (3/3)", "frontend": "100% (1/1)"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "vercel.json was added at repo root for Vercel platform deployment only. It does not affect runtime behavior of the Emergent preview. Full regression already covered in iteration_2.json (16/16 backend + full frontend passed)."
+}
